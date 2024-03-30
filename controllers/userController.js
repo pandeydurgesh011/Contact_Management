@@ -1,76 +1,55 @@
 const asyncHandler = require('express-async-handler');
-const Contact = require('../models/contactModel.js');
+const bcrypt = require("bcrypt");
+const User = require('../models/userModel.js');
+const jwt = require("jsonwebtoken");
+const { use } = require('../routes/userRoutes.js');
 
-const createContact = asyncHandler(async(req, res) => {
-    const { name, email, phone } = req.body;
-    if (!name || !email || !phone) {
-        res.status(400).json({ error: "All the fields are mandatory" });
-        return;
+
+const createUser = asyncHandler(async(req,res)=>{
+    const {username, email, password} = req.body;
+    if (!username || !email || !password){
+        res.status(400);
+        throw new Error("All fields are mandatory");
     }
-    try {
-        const contact = await Contact.create({ name, email, phone });
-        res.status(201).json(contact);
-    } catch (error) {
-        console.error("Error creating contact:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+    const userAvailable = await User.findOne({email});
+    if(userAvailable){
+        res.status(400);
+         throw new Error("User Already Exists");
     }
-});
-
-
-const getContacts = asyncHandler(async(req,res)=>{
-    const contact = await Contact.find();
-    res.status(200).json(contact);
-});
-
-const getContact = asyncHandler(async(req,res)=>{
-    
-    try {
-        const {id} = req.params;
-        const contact = await Contact.findById(id);
-        res.status(200).json(contact);
-        console.log(contact)
-    } catch (error) {
-        console.error("Error creating contact:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+    const hashedPassword = await bcrypt.hash(password,10);
+    const user = await User.create({
+        username,email,password:hashedPassword
+    })
+    if(user){
+        res.status(201).json({_id: user.id, username: user.username, email: user.email})
     }
-    
-});
-
-const updateContact = asyncHandler(async(req,res)=>{
-    try {
-        const {id} = req.params;
-        const contact = await Contact.findByIdAndUpdate(id,req.body)
-        if (!contact){
-            res.status(404).json({error: "Contact not Found"});
-            return;
-        }
-        const updatedContact = await Contact.findById(id)
-        res.status(200).json(updatedContact)
-    } catch (error) {
-        console.error("Error updating the contact", error);
-        res.status(500).json({error: "Internal Server Error"});
+    else{
+        res.status(400);
+        throw new Error("User data is not Valid");
     }
-});
+}) 
 
-const deleteContact = asyncHandler(async(req,res)=>{
-    try {
-        const {id} = req.params;
-        const contact = await Contact.findByIdAndDelete(id);
-        if (!contact){
-            res.status(404).json({message:"Contact Not found with given ID"});
-        }
-        res.status(200).json({message:"Contact Deleted"})
-        
-    } catch (error) {
-        console.error("Error creating contact:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+const loginUser = asyncHandler(async(req,res)=>{
+    const {email,password} = req.body;
+    if (!email || !password){
+        res.status(400);
+        throw new Error("Email and password is required to login");
     }
-});
+    const user = await User.findOne({email});
+    if (user && (await bcrypt.compare(password, user.password))){
+        const accessToken = jwt.sign({
+            user:{
+                username: user.username,
+                email: user.email,
+                id: user.id
+            }
+        },process.env.ACCESS_TOKEN_SECRET, {expiresIn: "1m"})
+        res.status(201).json({accessToken})
+    }
+    else{
+        res.status(400);
+        throw new Error("User Does not exists or password incorrect")
+    }
+})
 
-module.exports =  {
-    createContact,
-    getContact,
-    getContacts,
-    updateContact,
-    deleteContact
-}
+module.exports = {createUser,loginUser}
