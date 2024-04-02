@@ -18,7 +18,7 @@ const createContact = asyncHandler(async(req, res) => {
 
 
 const getContacts = asyncHandler(async(req,res)=>{
-    const contact = await Contact.find({user_id: req.user_id});
+    const contact = await Contact.find({user_id: req.user.id});
     res.status(200).json(contact);
 });
 
@@ -40,26 +40,31 @@ const getContact = asyncHandler(async(req,res)=>{
     
 });
 
-const updateContact = asyncHandler(async(req,res)=>{
+const updateContact = asyncHandler(async (req,res)=>{
+    const {id} = req.params;
     try {
-        const {id} = req.params;
         const contact = await Contact.findById(id);
         if (!contact){
-            res.status(404).json({error: "Contact not Found"});
-            return;
+            res.json(404);
+            throw new Error("Contact not found")
         }
-        if (contact.user_id.toString() !== req.user.id){
-            res.status(403);
-            throw new Error("User is not authorised to Update the contact");
+        if (contact.user_id.toString() == req.user.id){
+            await Contact.findByIdAndUpdate(id,req.body);
+            const updatedContact = await Contact.findById(id); 
+            res.status(200).json(updatedContact)
+            return
         }
-        const updatedContact = await Contact.findByIdAndUpdate(id,req.body)
-        updatedContact = await Contact.findById(id);
-        res.status(200).json(updatedContact)
+        else{
+            res.status(404).json({message:"Contact Not found"})
+            return
+        }
+        
     } catch (error) {
-        console.error("Error updating the contact", error);
-        res.status(500).json({error: "Internal Server Error"});
-    }
-});
+        console.error("Error Updating contact:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+        
+    }  
+})
 
 const deleteContact = asyncHandler(async(req,res)=>{
     try {
